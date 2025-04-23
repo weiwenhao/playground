@@ -77,7 +77,7 @@ fn playgrounds_run(string code):string! {
     println('build exec_path: ', exec_path)
 
     // process run 'nature build -o main main.n'
-    var state = process.run(nature_path, ['build', '-o', exec_path, source_path]) catch e {
+    var state = process.run(nature_path, ['build','--target', 'linux_amd64','-o', exec_path, source_path]) catch e {
         throw errorf('nature build failed: %s', nature_path, source_path, e.msg())
     }
 
@@ -86,7 +86,11 @@ fn playgrounds_run(string code):string! {
     }
 
     // process run exec file main get output
-    var cmd = process.command(exec_path, []) 
+    // docker run --rm -v /root/main:/app/main:ro alpine:latest /app/main
+    var mount_arg = fmt.sprintf('%s:/app/main:ro', exec_path)
+    var cmd = process.command('docker', ['run', '--rm', '-v', mount_arg, 'alpine:3.18', '/app/main']) catch e {
+        throw errorf('docker run failed: %s', e.msg())
+    }
 
     var output_buf = new io.buffer()
 
@@ -106,10 +110,11 @@ fn playgrounds_run(string code):string! {
 fn main():void! {
     var app = http.server()
 
-    app.post('/playgrounds/run', fn(http.request_t req, ptr<http.response_t> res) {
+    app.post('/api/playgrounds/run', fn(http.request_t req, ptr<http.response_t> res) {
         var body = req.body
 
         res.headers['Content-Type'] = 'application/json'
+        res.headers['Access-Control-Allow-Origin'] = '*'
 
         var result = playgrounds_run(body) catch e {
             println('catch error', e.msg())
@@ -128,7 +133,7 @@ fn main():void! {
         // res.send(result)
     })
 
-    println('server started')
+    println('server started: 8888')
     app.listen(8888)
     println('server is closed')
 }
