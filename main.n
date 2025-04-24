@@ -110,6 +110,10 @@ fn playgrounds_run(string code):string! {
 fn main():void! {
     var app = http.server()
 
+    app.get('/hello', fn(http.request_t req, ptr<http.response_t> res) {
+        res.send('hello world')
+    })
+
     app.post('/api/playgrounds/run', fn(http.request_t req, ptr<http.response_t> res) {
         var body = req.body
 
