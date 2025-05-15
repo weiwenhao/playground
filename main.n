@@ -88,21 +88,29 @@ fn playgrounds_run(string code):string! {
     // process run exec file main get output
     // docker run --rm -v /root/main:/app/main:ro alpine:latest /app/main
     var mount_arg = fmt.sprintf('%s:/app/main:ro', exec_path)
-    var cmd = process.command('docker', ['run', '--rm', '-v', mount_arg, 'alpine:3.18', '/app/main']) catch e {
+
+    var timeout_duration = "10" // s
+    var cmd = process.command('timeout', [timeout_duration, 'docker', 'run', '--rm', '-v', mount_arg, 'alpine:3.18', '/app/main']) catch e {
+        println('catch error', e.msg())
         throw errorf('docker run failed: %s', e.msg())
     }
 
     var output_buf = new io.buffer()
 
     cmd.stdout = output_buf
-
     cmd.stderr = output_buf
+    var p = cmd.spawn()
+    p.wait() catch e {
+        println('cmd.spawn catch error', e.msg())
+        throw errorf('exec failed: %s', e.msg())
+    }
+    os.rmdir(tmpdir_path, true)
+    println('exit code: ', p.exit_code)
 
-    cmd.spawn().wait() catch e {
-        throw errorf('exec main failed: %s', e.msg())
+    if p.exit_code != 0 {
+        throw errorf('exit code: %d', p.exit_code)
     }
 
-    os.rmdir(tmpdir_path, true)
     var output = output_buf.read_all() as string
     return output
 }
@@ -123,7 +131,7 @@ fn main():void! {
         var result = playgrounds_run(body) catch e {
             println('catch error', e.msg())
             res.status = 500 // 500 Internal Server Error
-            res.send(fmt.sprintf('{"error": %s}', e.msg()))
+            res.send(fmt.sprintf('{"error": "%s"}', e.msg()))
             return
         }
 
