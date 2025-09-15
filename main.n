@@ -9,41 +9,11 @@ import io
 import strings
 import os
 import path
+import json
 
 var seed = time.unix() as u64
 
 var nature_path = '/usr/local/nature/bin/nature'
-
-fn json_escape(string s):string {
-    [u8] buf = []
-    for c in s {
-        if c == `"`.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('"'.ascii())
-        } else if c == '\\'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('\\'.ascii())
-        } else if c == '\n'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('n'.ascii())
-        } else if c == '\r'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('r'.ascii())
-        } else if c == '\t'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('t'.ascii())
-        } else if c == '\b'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('b'.ascii())
-        } else if c == '\f'.ascii() {
-            buf.push('\\'.ascii())
-            buf.push('f'.ascii())
-        } else {
-            buf.push(c)
-        }
-    }
-    return buf as string
-}
 
 fn random_u32(rawptr<u64> state):u32 {
     *state ^= *state >> 12
@@ -81,9 +51,11 @@ fn playgrounds_run(string code):string! {
         throw errorf('nature build failed: %s', nature_path, source_path, e.msg())
     }
 
+    f.close()
     if state.exit_code != 0 {
         return fmt.sprintf(state.stderr)
     }
+    println('build success')
 
     // process run exec file main get output
     // docker run --rm -v /root/main:/app/main:ro alpine:latest /app/main
@@ -92,7 +64,7 @@ fn playgrounds_run(string code):string! {
     var timeout_duration = "10" // s
     var cmd = process.command('timeout', [timeout_duration, 'docker', 'run', '--rm', '-v', mount_arg, 'alpine:3.18', '/app/main']) catch e {
         println('catch error', e.msg())
-        throw errorf('docker run failed: %s', e.msg())
+        throw errorf('docker command create failed: %s', e.msg())
     }
 
     var output_buf = new io.buffer()
@@ -104,6 +76,9 @@ fn playgrounds_run(string code):string! {
         println('cmd.spawn catch error', e.msg())
         throw errorf('exec failed: %s', e.msg())
     }
+
+    println('docker exec success')
+
     os.rmdir(tmpdir_path, true)
     println('exit code: ', p.exit_code)
 
@@ -118,11 +93,11 @@ fn playgrounds_run(string code):string! {
 fn main():void! {
     var app = http.server()
 
-    app.get('/hello', fn(http.request_t req, ptr<http.response_t> res) {
+    app.get('/hello', fn(http.request_t req, ptr<http.response_t> res):void! {
         res.send('hello world')
     })
 
-    app.post('/api/playgrounds/run', fn(http.request_t req, ptr<http.response_t> res) {
+    app.post('/api/playgrounds/run', fn(http.request_t req, ptr<http.response_t> res):void! {
         var body = req.body
 
         res.headers['Content-Type'] = 'application/json'
@@ -138,11 +113,7 @@ fn main():void! {
         // result = 'hello world\n';
         println('read body', body, 'result', result)
 
-        // result 转移为 json string
-        result = json_escape(result)
-
-        res.send(fmt.sprintf('{"data": "%s"}', result))
-        // res.send(result)
+        res.send(json.serialize({'data': result}))
     })
 
     println('server started: 8888')
